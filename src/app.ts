@@ -21,74 +21,63 @@ const journalEntrySchema = z.object({
   postings: z.array(postingSchema).min(2),
 });
 
-export function createApp(service = new LedgerService()) {
+type ReadinessCheck = () => Promise<void>;
+
+export function createApp(service = new LedgerService(), readinessCheck: ReadinessCheck = async () => undefined) {
   const app = express();
   app.use(express.json());
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
-  app.get("/ready", (_req, res) => res.json({ status: "ready" }));
+  app.get("/ready", async (_req, res) => {
+    try {
+      await readinessCheck();
+      res.json({ status: "ready" });
+    } catch {
+      res.status(503).json({ status: "not_ready", error: { code: "DEPENDENCY_UNAVAILABLE", message: "A required dependency is unavailable" } });
+    }
+  });
 
-  app.post("/api/v1/accounts", (req, res, next) => {
+  app.post("/api/v1/accounts", async (req, res, next) => {
     try {
       const input = accountSchema.parse(req.body);
-      res.status(201).json({ data: service.createAccount(input) });
-    } catch (error) {
-      next(error);
-    }
+      res.status(201).json({ data: await service.createAccount(input) });
+    } catch (error) { next(error); }
   });
 
-  app.get("/api/v1/accounts", (_req, res) => {
-    res.json({ data: service.listAccounts() });
+  app.get("/api/v1/accounts", async (_req, res, next) => {
+    try { res.json({ data: await service.listAccounts() }); } catch (error) { next(error); }
   });
 
-  app.get("/api/v1/accounts/:accountId", (req, res, next) => {
-    try {
-      res.json({ data: service.getAccount(req.params.accountId) });
-    } catch (error) {
-      next(error);
-    }
+  app.get("/api/v1/accounts/:accountId", async (req, res, next) => {
+    try { res.json({ data: await service.getAccount(req.params.accountId) }); } catch (error) { next(error); }
   });
 
-  app.get("/api/v1/accounts/:accountId/balance", (req, res, next) => {
-    try {
-      res.json({ data: service.getBalance(req.params.accountId) });
-    } catch (error) {
-      next(error);
-    }
+  app.get("/api/v1/accounts/:accountId/balance", async (req, res, next) => {
+    try { res.json({ data: await service.getBalance(req.params.accountId) }); } catch (error) { next(error); }
   });
 
-  app.post("/api/v1/journal-entries", (req, res, next) => {
+  app.post("/api/v1/journal-entries", async (req, res, next) => {
     try {
       const input = journalEntrySchema.parse(req.body);
-      res.status(201).json({ data: service.postJournalEntry(input) });
-    } catch (error) {
-      next(error);
-    }
+      res.status(201).json({ data: await service.postJournalEntry(input) });
+    } catch (error) { next(error); }
   });
 
-  app.get("/api/v1/journal-entries", (_req, res) => {
-    res.json({ data: service.listJournalEntries() });
+  app.get("/api/v1/journal-entries", async (_req, res, next) => {
+    try { res.json({ data: await service.listJournalEntries() }); } catch (error) { next(error); }
   });
 
-  app.get("/api/v1/journal-entries/:entryId", (req, res, next) => {
-    try {
-      res.json({ data: service.getJournalEntry(req.params.entryId) });
-    } catch (error) {
-      next(error);
-    }
+  app.get("/api/v1/journal-entries/:entryId", async (req, res, next) => {
+    try { res.json({ data: await service.getJournalEntry(req.params.entryId) }); } catch (error) { next(error); }
   });
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (error instanceof z.ZodError) {
-      return res.status(422).json({
-        error: { code: "VALIDATION_ERROR", message: "Request validation failed", details: error.issues },
-      });
+      return res.status(422).json({ error: { code: "VALIDATION_ERROR", message: "Request validation failed", details: error.issues } });
     }
-
     if (error instanceof LedgerError) {
       return res.status(error.statusCode).json({ error: { code: error.code, message: error.message } });
     }
-
     return res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Unexpected server error" } });
   });
 
