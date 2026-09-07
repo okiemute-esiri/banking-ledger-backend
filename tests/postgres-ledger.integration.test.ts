@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { LedgerError } from "../src/domain/errors.js";
 import { PostgresLedgerRepository } from "../src/repositories/postgres-ledger-repository.js";
 import { LedgerService } from "../src/services/ledger-service.js";
 
@@ -40,7 +39,7 @@ describePostgres("PostgreSQL ledger persistence", () => {
       await expect(service2.postJournalEntry({
         ...input,
         description: "Changed request",
-      })).rejects.toMatchObject<Partial<LedgerError>>({ code: "IDEMPOTENCY_CONFLICT", statusCode: 409 });
+      })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT", statusCode: 409 });
 
       expect((await service2.getBalance(cash.id)).balanceMinor).toBe(12500);
     } finally {
