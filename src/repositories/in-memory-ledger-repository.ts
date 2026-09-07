@@ -1,40 +1,44 @@
 import type { Account } from "../domain/account.js";
 import type { JournalEntry } from "../domain/journal-entry.js";
+import { DuplicateReferenceError, type LedgerRepository } from "./ledger-repository.js";
 
-export class InMemoryLedgerRepository {
+export class InMemoryLedgerRepository implements LedgerRepository {
   private readonly accounts = new Map<string, Account>();
   private readonly entries = new Map<string, JournalEntry>();
   private readonly references = new Map<string, string>();
 
-  saveAccount(account: Account): Account {
+  async saveAccount(account: Account): Promise<Account> {
     this.accounts.set(account.id, account);
     return account;
   }
 
-  getAccount(id: string): Account | undefined {
+  async getAccount(id: string): Promise<Account | undefined> {
     return this.accounts.get(id);
   }
 
-  listAccounts(): Account[] {
+  async listAccounts(): Promise<Account[]> {
     return [...this.accounts.values()];
   }
 
-  saveEntry(entry: JournalEntry): JournalEntry {
+  async saveEntry(entry: JournalEntry): Promise<JournalEntry> {
+    if (this.references.has(entry.reference)) {
+      throw new DuplicateReferenceError(entry.reference);
+    }
     this.entries.set(entry.id, entry);
     this.references.set(entry.reference, entry.id);
     return entry;
   }
 
-  getEntry(id: string): JournalEntry | undefined {
+  async getEntry(id: string): Promise<JournalEntry | undefined> {
     return this.entries.get(id);
   }
 
-  getEntryByReference(reference: string): JournalEntry | undefined {
+  async getEntryByReference(reference: string): Promise<JournalEntry | undefined> {
     const id = this.references.get(reference);
     return id ? this.entries.get(id) : undefined;
   }
 
-  listEntries(): JournalEntry[] {
+  async listEntries(): Promise<JournalEntry[]> {
     return [...this.entries.values()];
   }
 }
